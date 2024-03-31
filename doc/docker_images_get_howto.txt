@@ -1,0 +1,21 @@
+docker images for this repo: how to get them
+
+1. You need add certificate of registry to trusted certificates,
+   by running script from this repo doc dir, as user or as root:
+
+   $ ./gitlab_local_install_certificate.sh
+   sudo pass: ***
+	 ...
+   OK
+
+2. Next login to registry with yours Login and Token
+
+   docker login gitlab.local
+
+3. Run latest image for channel, for example 'staging'
+
+   docker run gitlab.local/team-op/k8s-example/test1-deployer:staging
+
+4. You can also run any other existing image:
+
+   docker run gitlab.local/team-op/k8s-example/test1-master:833620ec

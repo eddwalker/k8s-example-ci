@@ -1,0 +1,9 @@
+.ci:
+  show:
+    variables:
+      - |
+        # CI variables: https://docs.gitlab.com/ee/ci/variables/predefined_variables.html
+        echo -e "\e[0Ksection_start:`date +%s`:ci_info[collapsed=true]\r\e[0Kshow/hide more variables .."
+        env | sort
+        echo -e "\e[0Ksection_end:`date +%s`:ci_info\r\e[0K"
+

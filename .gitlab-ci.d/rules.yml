@@ -1,0 +1,50 @@
+.rules:
+  scheduled:
+    certificates-check:
+      - if: (
+               $CI_PIPELINE_SOURCE == "schedule"
+            && $CI_JOB_WANTED      == "certificates-check"
+            )
+  pushed:
+    builder-module:
+      - if: (
+               $CI_PIPELINE_SOURCE   == "push"
+            && $CI_COMMIT_REF_SLUG   == "master"
+            && $CI_COMMIT_BEFORE_SHA !~ $REGEXP_ZERO_SHA
+            && $CI_COMMIT_MESSAGE    !~ /^Merge branch/
+            && $CI_COMMIT_MESSAGE    =~ /kaniko init/
+            )
+    local-module:
+      - if: (
+               $CI_PIPELINE_SOURCE   == "push"
+            && $CI_COMMIT_BEFORE_SHA !~ $REGEXP_ZERO_SHA
+            && $CI_COMMIT_MESSAGE    !~ /^Merge branch/
+            )
+        changes:
+          - ${MODULE_DIR}/**/*
+    global-module:
+      - if: (
+               $CI_PIPELINE_SOURCE   == "push"
+            && $CI_COMMIT_BEFORE_SHA !~ $REGEXP_ZERO_SHA
+            && $CI_COMMIT_MESSAGE    !~ /^Merge branch/
+            )
+        changes:
+          - ${MODULE_DIR}/**/*
+          - modules/020-nodeinit/**/*
+          - libs/**/*
+    gitlab-ci:
+      - if: (
+               $CI_PIPELINE_SOURCE   == "push"
+            && $CI_COMMIT_REF_SLUG   == "master"
+            )
+        changes:
+          - .gitlab-ci.yml     # for debug!
+          - .gitlab-ci.d/*.yml # for debug!
+    channel-tags:
+      - if: (
+               $CI_PIPELINE_SOURCE   == "push"
+            && $CI_COMMIT_REF_SLUG   == "master"
+            )
+        changes:
+          - tags.txt
+

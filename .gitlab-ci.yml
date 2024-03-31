@@ -1,0 +1,110 @@
+include:
+  - local: .gitlab-ci.d/**.yml
+
+default:
+  image:
+    name: ${CI_REGISTRY_IMAGE}/master-kaniko:staging
+    entrypoint: [""]
+  interruptible: true
+  tags: [linux]
+  retry: 0
+
+variables:
+  BUILD_MODULE:         kaliko                 # Module which will be used as default image to build other modules
+  GLOBAL_MODULE:        deployer               # Module which includes all other modules
+  DEPLOYER_OS_VERSION:  ubuntu:jammy-20240212  # Used for build deployer docker image
+  KANIKO_CACHE_ENABLED: "true"                 # https://github.com/GoogleContainerTools/kaniko/issues/2713
+  KANIKO_CACHE_TTL:     24h                    # https://cloud.google.com/build/docs/optimize-builds/kaniko-cache
+  FEATURE_DOMAIN:       test.domain.com        # Points to an k8s ingress with both a wildcard DNS A-name
+                                               # and an SSL certificate to handle any feature deployments,
+                                               # this MUST be used in Gitlab environments only.
+stages:
+  - build
+  - tag
+  - test
+  - deploy
+
+# Default way to build Dockerfiles from modules/ folder.
+# Every module that can be built must be listed below except 'kaniko' which handled by docker-init-*-kaniko jobs.
+# To find out more about the module selection mechanism, refer to the 'rules:' section of this job.
+
+docker-build:
+  stage: build
+  timeout: 15 minutes
+  extends: .kaniko_build
+  rules:
+    - !reference [.rules, pushed, local_module]
+    - !reference [.rules, pushed, global_module]
+  parallel:
+    matrix:
+      - MODULE_DIR: modules/*-deployer
+
+# Label every image listed in tags.txt with the specified tag.
+# This ensures that only individuals with Read-Write permissions on tags.txt can release of images.
+
+docker-tag:
+  stage: build
+  timeout: 5 minutes
+  extends:
+  rules:
+    - !reference [.rules, pushed, tags.txt]
+  before_script:
+    - !reference [.kaniko, make, config]
+  script:
+    - |
+      # Note: kaniko/crane image has busybox sh only
+      echo "$(set -x; /kaniko/crane catalog ${CI_REGISTRY} --full-ref)"
+      while read -r a b
+      do
+        echo "$a" | grep -qE '^(#|$)' && continue
+        echo "$(set -x; /kaniko/crane tag "$a" "$b")"
+      done < tags.txt
+
+# Build 'kaniko' image if something changed in kaniko module folder.
+# You have to use this on Gitlab init too since no kaniko image builded yet.
+
+docker-init-build-kaniko:
+  stage: build
+  timeout: 5 minutes
+  extends: .kaniko_build
+  rules:
+    - !reference [.rules, pushed, build_module]
+  image:
+    name: gcr.io/kaniko-project/executor:v1.21.1-debug
+    entrypoint: [""]
+  parallel:
+    matrix:
+    - MODULE_DIR: modules/*-kaniko
+
+# Apply the 'staging' tag to the latest build of the 'kaniko' image
+# if this tag has not been added to the Docker registry catalog yet.
+# For subsequent kaniko releases, manual specification in tags.txt will be required.
+
+docker-init-tag-kaniko:
+  stage: tag
+  timeout: 5 minutes
+  extends: .kaniko_tag_kaniko
+  needs: [ docker-init-build-kaniko ]
+  rules:
+    - !reference [.rules, pushed, build_module]
+  parallel:
+    matrix:
+    - MODULE_DIR: modules/*-kaniko
+
+# Check self-signed certificates expiration date, exit with code > 0 if any will expire soon
+# Utilize these certificates by GitLab server or GitLab builder components
+
+certificates-check:
+  stage: test
+  timeout: 5 minutes
+  rules:
+    - !reference [.rules, scheduled, any]
+  retry: 2
+  image: ${DEPLOYER_OS_VERSION}
+  script:
+    - |
+      apt-get update
+      apt-get install openssl --yes
+      cd $CI_PROJECT_DIR
+      ./self-signed-eol-in-days.sh ./self-signed.crt 60
+

@@ -1,0 +1,43 @@
+# Only the modules that are specified below will be applied.
+# Modules with the same prefix (like 123-) are mutually exclusive within each chapter.
+# For each module below, there must be a folder with the same name in the modules directory.
+# Note: for now, only simple YAML format like the one shown below is supported.
+cluster:
+  tag: "staging"   # Check /tags.txt to discover image version
+  api_endpoint_ipaddress: "10.10.10.10"
+  api_endpoint_name: "cluster-api-endpoint.kvm.local"
+  api_node_initial: "controller-0"
+  registry-suffix: "kubernetes"  # base k8s images will be in $CI_REGISTRY/$suffix/img-name:tag
+  version: "1.29.2"
+  registry: "gitlab.local:5005"
+deployer:
+  - 010-deployer/010-packages-install
+  - 010-deployer/020-packages-remove
+  - 010-deployer/030-opentofu
+  - 010-deployer/040-helm
+  - 010-deployer/050-kubectl
+nodeinit:
+  - 020-nodeinit/011-prefly
+  - 020-nodeinit/012-timezone
+  - 020-nodeinit/013-packages-remove
+  - 020-nodeinit/015-swap
+  - 020-nodeinit/020-modprobe
+  - 020-nodeinit/030-sysctl-deckhouse
+  - 020-nodeinit/040-services
+  - 020-nodeinit/050-sshd
+  - 020-nodeinit/060-host-info
+  - 020-nodeinit/070-csi-crio
+  - 020-nodeinit/090-kube-init
+kubernetes:
+  - 120-nodelocaldns
+  - 130-cni-cilium
+  - 150-dashboard
+complex_test:
+  - name: my_function
+    code: |
+      def my_function():
+        print("This is a function from YAML file.")
+  - name: edede
+    code:
+      apt: aaaaaa
+      sss: bbbbbb

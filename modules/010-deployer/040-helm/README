@@ -1,0 +1,29 @@
+
+# compare vault variants: https://www.linkedin.com/posts/hashicorp_kubernetes-vault-integration-via-sidecar-activity-7051614134055927808-kJlu?trk=public_profile_like_view
+# https://developer.hashicorp.com/vault/tutorials/kubernetes/vault-secrets-operator <--- guide!
+# https://github.com/hashicorp/vault-secrets-operator
+# https://medium.com/@verove.clement/inject-secret-in-application-from-vault-agent-injector-60a3fe71628e
+
+# vault позволяет автоматизировать замену паролей, (если приложение поддерживает это - как это вообще так?)
+# то пароль заменится на лету, если же нет, то достаточно сдеать re-deploy.
+# хранение всех паролей в vault дает возможность знать кто когда что использовал, какие пароли есть.
+
+# ротация паролей не работает сама по себе, так как надо и старый (+ 1 месяц) и новый пароли держать активными.
+# и пинать владельца, чтобы перезапустил сервисы или для чего у него там пароль
+# https://youtu.be/klC4ssaPHZY?t=2951
+
+# бекапы надо тоже мониторить на размер время выполнения и размер, делаются через крон
+
+# результаты в slack: тесты пройдены , релиз влит
+
+# mount секретов в pod надо делать нtmpfs, что бы секреты не сохранялись на диске
+# отсюда же видимо рекомендация 12 factors передавать секреты как env
+
+# в CI проверять helm чарты на предмет того, что разработчики не изменили annotations
+#потому что значения в них влияют на безопасность в кластере:
+#pointers to logging, monitoring, analitycs, audit, seccomp..
+
+# надо запретить net: host (приводит к побегу из network policy)
+
+# run every chart against a running! cluster to check merge possible
+#helm install --dry-run --debug node-local-dns .

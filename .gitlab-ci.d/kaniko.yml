@@ -1,0 +1,83 @@
+.kaniko:
+  make:
+    config:
+      - |
+        # Write PROXY variables
+        echo "
+        CI_PROXY_HTTP_APT=$CI_PROXY_HTTP_APT
+        CI_PROXY_HTTPS_APT=$CI_PROXY_HTTPS_APT
+        CI_PROXY_HTTP_GET=$CI_PROXY_HTTP_GET
+        CI_PROXY_HTTPS_GET=$CI_PROXY_HTTP_GET
+        CI_NOPROXY=$CI_NOPROXY
+        " >> /.env
+        for i in $CI_RUNNER_HELPER_ENV; do
+          echo "$i" >> /.env
+        done
+      - |
+        # Create config file for Kaniko:
+      - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+      - |
+        # Force kaniko to respect self-signed certificate of gitlab.local
+      - cat ./self-signed.crt >> /kaniko/ssl/certs/ca-certificates.crt
+  show:
+    image-history:
+      - |
+        docker history ${IMAGE_NAME}
+
+.kaniko-build:
+  environment:
+    name: review/${CI_COMMIT_REF_NAME}
+    url:  https://${CI_ENVIRONMENT_SLUG}.${FEATURE_DOMAIN}
+  before_script:
+    - !reference [.bash,   make, variables]
+    - !reference [.bash,   show, variables]
+    - !reference [.ci,     show, variables]
+    - !reference [.kaniko, make, config]
+  script:
+    - sh -c "set -x; /kaniko/executor
+      --reproducible
+      --context     "${CI_PROJECT_DIR}"
+      --dockerfile  "${CI_PROJECT_DIR}/${MODULE_DIR_RESOLVED}/Dockerfile"
+      --build-arg      OS_VERSION=${DEPLOYER_OS_VERSION}
+      --label          CI_ENVIRONMENT_URL=${CI_ENVIRONMENT_URL}
+      --label          CI_NAMESPACE=${CI_NAMESPACE}
+      --destination "${IMAGE_NAME}"
+      --cache=${KANIKO_CACHE_ENABLED}
+      --cache-ttl=${KANIKO_CACHE_TTL}"
+      # May be useful:
+      #   --image-name-tag-with-digest-file
+      #   --zero-file-timestamps
+      #   --compressed-caching=false
+      # Adding next 2 labels may lead to unreproducibility while rebuild from the git
+      #   --label          CI_PIPELINE_URL=${CI_PIPELINE_URL}
+      #   --label          IMAGE_NAME=${IMAGE_NAME}
+    - |
+      # Get image size
+      size=$(/kaniko/crane manifest "${IMAGE_NAME}" | grep -o '"size":[0-9]*' | xargs | sed -e 's|size:||g' -e 's|\ |+|g' -e 's|^|(|' -e 's|$|)|' -e 's|$|/1024/1024|' | bc)
+      printf "%s MB\n" "$size"
+    - !reference [.bash, show, variables]
+
+.kaniko-tag-kaniko:
+  image:
+    name: ${CI_REGISTRY_IMAGE}/${CI_COMMIT_REF_SLUG}-kaniko:${CI_COMMIT_SHORT_SHA}
+    entrypoint: [""]
+  before_script:
+    - !reference [.kaniko, make, config]
+    - !reference [.bash,   make, variables]
+    - !reference [.bash,   show, variables]
+    - !reference [.ci,     show, variables]
+  script:
+    - |
+      # List registry:
+      echo "$(set -x; /kaniko/crane catalog ${CI_REGISTRY} --full-ref)"
+    - |
+      # Check manifest with tag 'staging' exists in catalog
+      if /kaniko/crane manifest $IMAGE_PREFIX:staging >/dev/null ; then
+        echo "The 'master-kaliko' image with the 'staging' tag is already present in the registry"
+        echo "so the set tag operation for revision $CI_COMMIT_SHORT_SHA is being skipped."
+        echo "Warning! You must commit kaliko tag to tags.txt to make this version available to build:"
+        echo "  $IMAGE_PREFIX:$CI_COMMIT_SHORT_SHA  staging"
+      else
+        echo "Setting tag 'staging' since no kaniko image with such tag exists in registry yet:"
+        echo "$(set -x; /kaniko/crane tag "$IMAGE_PREFIX:$CI_COMMIT_SHORT_SHA" "staging")"
+      fi
